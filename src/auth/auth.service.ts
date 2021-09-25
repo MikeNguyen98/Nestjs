@@ -5,6 +5,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import PostgresErrorCode from 'src/database/postgresErrorCode.enum';
 import { JwtService } from '@nestjs/jwt';
+import TokenPayload from './tokenPayload.interface';
 @Injectable()
 export class AuthService {
   constructor(
@@ -43,16 +44,8 @@ export class AuthService {
       const user = await this.userService.findOne(usernameOrEmail);
 
       await this.verifyPassword(plainTextPassword, user.password);
-
       user.password = undefined;
-      const payload = {
-        username: user.username,
-        sub: user.id,
-        email: user.email,
-      };
-      return {
-        access_token: this.jwtService.sign(payload),
-      };
+      return user;
     } catch (error) {
       throw new HttpException(
         'Wrong credentials provided',
@@ -75,8 +68,7 @@ export class AuthService {
   public getCookieWithJwtToken(userId: number) {
     const payload: TokenPayload = { userId };
     const token = this.jwtService.sign(payload);
-    return `Authentication=${token}; HttpOnly; Path=/; Max-Age='60',
-    )}`;
+    return `Authentication=${token}; HttpOnly; Path=/; Max-Age=60s`;
   }
 
   public getCookieForLogOut() {
