@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 enum PostgresErrorCode {
   UniqueViolation = '23505',
 }

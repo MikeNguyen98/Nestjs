@@ -1,3 +1,4 @@
+import { Exclude } from 'class-transformer';
 import {
   BaseEntity,
   Column,
@@ -6,7 +7,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-
 @Entity() // db table
 export class User extends BaseEntity {
   @PrimaryGeneratedColumn()
@@ -26,4 +26,8 @@ export class User extends BaseEntity {
 
   @UpdateDateColumn()
   lastchanged: Date;
+
+  @Column({ nullable: true })
+  @Exclude()
+  public currentHashedRefreshToken?: string;
 }

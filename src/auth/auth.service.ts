@@ -1,21 +1,19 @@
-import { ConfigService } from '@nestjs/config';
 import { Register } from './../dto/register.dto';
 import { UserService } from './../module/user/user.service';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import * as argon2 from 'argon2';
-import PostgresErrorCode from 'src/database/postgresErrorCode.enum';
+import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import TokenPayload from './tokenPayload.interface';
+import PostgresErrorCode from 'src/database/postgresErrorCode.enum';
 @Injectable()
 export class AuthService {
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
-    private readonly configService: ConfigService,
   ) {}
   public async register(user: Register) {
     const { password } = user;
-    const hashedPassword = await argon2.hash(password);
+    const hashedPassword = await bcrypt.hash(password, 10);
     try {
       const createdUser = await this.userService.create({
         ...user,
@@ -57,9 +55,9 @@ export class AuthService {
     plainTextPassword: string,
     hashedPassword: string,
   ) {
-    const passwordValid = await argon2.verify(
-      hashedPassword,
+    const passwordValid = await bcrypt.compare(
       plainTextPassword,
+      hashedPassword,
     );
     if (!passwordValid) {
       throw new HttpException('Incorrect password', HttpStatus.BAD_REQUEST);
@@ -73,5 +71,28 @@ export class AuthService {
 
   public getCookieForLogOut() {
     return `Authentication=; HttpOnly; Path=/; Max-Age=0`;
+  }
+  public getCookieWithJwtRefreshToken(userId: number) {
+    const payload: TokenPayload = { userId };
+    const token = this.jwtService.sign(payload);
+    const cookie = `Refresh=${token}; HttpOnly; Path=/; Max-Age=60s`;
+    return {
+      cookie,
+      token,
+    };
+  }
+  public getCookiesForLogOut() {
+    return [
+      'Authentication=; HttpOnly; Path=/; Max-Age=0',
+      'Refresh=; HttpOnly; Path=/; Max-Age=0',
+    ];
+  }
+  public async getUserFromAuthenticationToken(token: string) {
+    const payload: TokenPayload = this.jwtService.verify(token, {
+      secret: process.env.SECRET,
+    });
+    if (payload.userId) {
+      return this.userService.getById(payload.userId);
+    }
   }
 }

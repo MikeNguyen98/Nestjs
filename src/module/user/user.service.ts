@@ -3,6 +3,7 @@ import { CreateUserDto } from './../../dto/user/create-user.dto';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeleteResult, Repository, UpdateResult } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 @Injectable()
 export class UserService {
   constructor(
@@ -42,34 +43,31 @@ export class UserService {
     await this.userRepository.save(newUser);
     return newUser;
   }
-  // async login(login: Login): Promise<User> {
-  //   try {
-  //     const { usernameOrEmail, password } = login;
-  //     const existingUser = await this.userRepository.findOne(
-  //       usernameOrEmail.includes('@')
-  //         ? { email: usernameOrEmail }
-  //         : { username: usernameOrEmail },
-  //     );
-  //     if (!existingUser) {
-  //       throw new HttpException(
-  //         'User with this username or email does not exist',
-  //         HttpStatus.NOT_FOUND,
-  //       );
-  //     }
 
-  //     const passwordValid = await argon2.verify(
-  //       existingUser.password,
-  //       password,
-  //     );
-  //     if (!passwordValid) {
-  //       throw new HttpException('Incorrect password', HttpStatus.NOT_FOUND);
-  //     }
+  async setCurrentRefreshToken(refreshToken: string, userId: number) {
+    const currentHashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.userRepository.update(userId, {
+      currentHashedRefreshToken,
+    });
+  }
+  async getUserIfRefreshTokenMatches(refreshToken: string, userId: number) {
+    const user = await this.getById(userId);
 
-  //     return existingUser;
-  //   } catch (error) {
-  //     return null;
-  //   }
-  // }
+    const isRefreshTokenMatching = await bcrypt.compare(
+      refreshToken,
+      user.currentHashedRefreshToken,
+    );
+
+    if (isRefreshTokenMatching) {
+      return user;
+    }
+  }
+  async removeRefreshToken(userId: number) {
+    return this.userRepository.update(userId, {
+      currentHashedRefreshToken: null,
+    });
+  }
+
   async update(updateUserDto: User): Promise<UpdateResult> {
     return await this.userRepository.update(updateUserDto.id, updateUserDto);
   }

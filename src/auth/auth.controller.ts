@@ -1,3 +1,4 @@
+import { UserService } from './../module/user/user.service';
 import { Response } from 'express';
 import { LocalAuthGuard } from './local-auth.guard';
 import { Register } from './../dto/register.dto';
@@ -15,10 +16,14 @@ import {
 } from '@nestjs/common';
 import RequestWithUser from './requestWithUser.interface';
 import JwtAuthenticationGuard from './jwt-auth.guard';
+import JwtRefreshGuard from './jwt-refresh.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly userService: UserService,
+  ) {}
 
   @Post('register')
   async register(@Body() registrationData: Register) {
@@ -28,18 +33,35 @@ export class AuthController {
   @HttpCode(200)
   @UseGuards(LocalAuthGuard)
   @Post('log-in')
-  async logIn(@Request() request: RequestWithUser, @Res() response: Response) {
+  async logIn(@Req() request: RequestWithUser) {
     const { user } = request;
-    const cookie = this.authService.getCookieWithJwtToken(user.id);
-    response.setHeader('Set-Cookie', cookie);
-    user.password = undefined;
-    return response.send(user);
+    const accessTokenCookie = this.authService.getCookieWithJwtToken(user.id);
+    const { cookie: refreshTokenCookie, token: refreshToken } =
+      this.authService.getCookieWithJwtRefreshToken(user.id);
+    await this.userService.setCurrentRefreshToken(refreshToken, user.id);
+    request.res.setHeader('Set-Cookie', [
+      accessTokenCookie,
+      refreshTokenCookie,
+    ]);
+    return user;
   }
   @UseGuards(JwtAuthenticationGuard)
   @Post('log-out')
-  async logOut(@Res() response: Response) {
-    response.setHeader('Set-Cookie', this.authService.getCookieForLogOut());
-    return response.sendStatus(200);
+  @HttpCode(200)
+  async logOut(@Req() request: RequestWithUser) {
+    await this.userService.removeRefreshToken(request.user.id);
+    request.res.setHeader('Set-Cookie', this.authService.getCookiesForLogOut());
+  }
+  @UseGuards(JwtRefreshGuard)
+  @Get('refresh')
+  refresh(@Req() request: RequestWithUser) {
+    const accessTokenCookie = this.authService.getCookieWithJwtToken(
+      request.user.id,
+    );
+
+    request.user.password = undefined;
+    request.res.setHeader('Set-Cookie', accessTokenCookie);
+    return request.user;
   }
   @UseGuards(JwtAuthenticationGuard)
   @Get()
